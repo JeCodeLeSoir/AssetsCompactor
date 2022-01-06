@@ -41,6 +41,8 @@ namespace AssetsCompile
             this.textBox_password = new System.Windows.Forms.TextBox();
             this.contextMenuStrip_TreeNode = new System.Windows.Forms.ContextMenuStrip(this.components);
             this.toolStripMenuItem_Remove = new System.Windows.Forms.ToolStripMenuItem();
+            this.textBox_preview = new System.Windows.Forms.TextBox();
+            this.label1 = new System.Windows.Forms.Label();
             ((System.ComponentModel.ISupportInitialize)(this.pictureBox_preview)).BeginInit();
             this.contextMenuStrip_TreeNode.SuspendLayout();
             this.SuspendLayout();
@@ -118,7 +120,7 @@ namespace AssetsCompile
             // 
             // textBox_password
             // 
-            this.textBox_password.Location = new System.Drawing.Point(388, 433);
+            this.textBox_password.Location = new System.Drawing.Point(388, 441);
             this.textBox_password.Name = "textBox_password";
             this.textBox_password.Size = new System.Drawing.Size(245, 23);
             this.textBox_password.TabIndex = 6;
@@ -136,9 +138,29 @@ namespace AssetsCompile
             this.toolStripMenuItem_Remove.Size = new System.Drawing.Size(117, 22);
             this.toolStripMenuItem_Remove.Text = "Remove";
             // 
+            // textBox_preview
+            // 
+            this.textBox_preview.Location = new System.Drawing.Point(517, 241);
+            this.textBox_preview.Multiline = true;
+            this.textBox_preview.Name = "textBox_preview";
+            this.textBox_preview.ReadOnly = true;
+            this.textBox_preview.Size = new System.Drawing.Size(140, 139);
+            this.textBox_preview.TabIndex = 7;
+            // 
+            // label1
+            // 
+            this.label1.AutoSize = true;
+            this.label1.Location = new System.Drawing.Point(388, 423);
+            this.label1.Name = "label1";
+            this.label1.Size = new System.Drawing.Size(57, 15);
+            this.label1.TabIndex = 8;
+            this.label1.Text = "Password";
+            // 
             // Form1
             // 
             this.ClientSize = new System.Drawing.Size(669, 494);
+            this.Controls.Add(this.label1);
+            this.Controls.Add(this.textBox_preview);
             this.Controls.Add(this.textBox_password);
             this.Controls.Add(this.pictureBox_preview);
             this.Controls.Add(this.buttonOpen);
@@ -167,6 +189,8 @@ namespace AssetsCompile
         private System.Windows.Forms.TextBox textBox_password;
         private System.Windows.Forms.ContextMenuStrip contextMenuStrip_TreeNode;
         private System.Windows.Forms.ToolStripMenuItem toolStripMenuItem_Remove;
+        private System.Windows.Forms.TextBox textBox_preview;
+        private System.Windows.Forms.Label label1;
     }
 }
 

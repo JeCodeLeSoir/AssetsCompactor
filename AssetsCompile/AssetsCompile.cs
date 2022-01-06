@@ -43,6 +43,26 @@ namespace AssetsCompile
             _fileheaders.Add(_fileheader);
         }
 
+        public void removeFile(string deletepath)
+        {
+            int deleteId = -1;
+            for (int i = 0; i < _fileheaders.Count; i++)
+            {
+                Console.WriteLine(deletepath + "==" + _fileheaders[i].path);
+                if (deletepath.ToUpper() == _fileheaders[i].path.ToUpper())
+                {
+                    deleteId = i;
+                    Console.WriteLine("Find " + deletepath);
+                    break;
+                }
+            }
+            if (deleteId != -1)
+            {
+                _fileheaders.RemoveAt(deleteId);
+                Console.WriteLine("delete : " + deleteId);
+            }
+        }
+
         public AssetsCompile()
         {
             _fileheaders = new List<sFile>();
@@ -110,16 +130,20 @@ namespace AssetsCompile
             Array.Copy(KeyCrypto, key, KeyCrypto.Length);
             Array.Copy(IVCrypto, 0, key, KeyCrypto.Length, IVCrypto.Length);
 
-            for(int i = 0; i < key.Length ; i ++)
-                Console.Write(key[i].ToString("x2"));
-            Console.Write("\n");
+             
 
             BinaryWriter Crypto_bin = new BinaryWriter(new MemoryStream());
 
 
-            //byte[] keyhash = EncryptKey(key, password);
-            Crypto_bin.Write(key.Length);
-            Crypto_bin.Write(key);
+            byte[] keyhash = EncryptKey(key, password);
+
+            Crypto_bin.Write(keyhash.Length);
+            Crypto_bin.Write(keyhash);
+
+            for (int i = 0; i < keyhash.Length; i++)
+                Console.Write(keyhash[i].ToString("x2"));
+            Console.Write("\n");
+
             Crypto_bin.Write(EncryptStream(asset_data));
             
 
@@ -130,7 +154,9 @@ namespace AssetsCompile
 
             Crypto_bin.Close();
         }
-         
+
+      
+
         private byte[] KeyCrypto;
         private byte[] IVCrypto;
 
@@ -146,49 +172,75 @@ namespace AssetsCompile
             }
         }
 
-        private const int SaltSize = 8;
+        
 
         public byte[] EncryptKey(byte[] key, string password)
         {
-            var keyGenerator = new Rfc2898DeriveBytes(password, SaltSize);
-            //keyGenerator.Salt
-
+            var keyGenerator = new Rfc2898DeriveBytes(password, 8);
             var rijndael = Rijndael.Create();
- 
+
             rijndael.IV = keyGenerator.GetBytes(rijndael.BlockSize / 8);
             rijndael.Key = keyGenerator.GetBytes(rijndael.KeySize / 8);
 
-            using (MemoryStream ms = new MemoryStream())
+            using (var fileStream = new BinaryWriter(new MemoryStream()))
             {
-                using (var cryptoStream = new CryptoStream(ms, rijndael.CreateEncryptor(), CryptoStreamMode.Write))
+
+                fileStream.Write(keyGenerator.Salt);
+                fileStream.Write(key.Length);
+                
+
+                var mscrypto = new MemoryStream();
+
+                using (var cryptoStream = new CryptoStream(mscrypto, rijndael.CreateEncryptor(), CryptoStreamMode.Write))
                 {
-                    cryptoStream.Write(key, 0, key.Length); 
+                    cryptoStream.Write(key);
                 }
 
-                return ms.ToArray();
+                byte[] keyhash = mscrypto.ToArray();
+
+                fileStream.Write(keyhash.Length);
+                fileStream.Write(keyhash);
+
+                return ((MemoryStream) fileStream.BaseStream).ToArray();
             }
         }
 
-        public byte[] DecryptKey(byte[] keyhash, string password)
+        public byte[] DecryptKey(byte[] keyhash, string password, out bool isValide)
         {
-            var keyGenerator = new Rfc2898DeriveBytes(password, SaltSize);
-            //keyGenerator.Salt
-
-            var rijndael = Rijndael.Create();
-
-            rijndael.IV = keyGenerator.GetBytes(rijndael.BlockSize / 8);
-            rijndael.Key = keyGenerator.GetBytes(rijndael.KeySize / 8);
-
-            using (MemoryStream ms = new MemoryStream(keyhash))
+            using (var fileStream = new BinaryReader( new MemoryStream(keyhash)))
             {
-                using (var cryptoStream = new CryptoStream(ms, rijndael.CreateEncryptor(), CryptoStreamMode.Read))
-                {
-                    byte[] buffer = new byte[keyhash.Length];
-                    cryptoStream.Read(buffer);
+                // write random salt
+                byte[] Salt = fileStream.ReadBytes(8);
+                int length = fileStream.ReadInt32();
+                int length_h = fileStream.ReadInt32();
+                byte[] hash = fileStream.ReadBytes(length_h);
 
-                    return buffer;
+                var keyGenerator = new Rfc2898DeriveBytes(password, Salt);
+                var rijndael = Rijndael.Create();
+
+                rijndael.IV = keyGenerator.GetBytes(rijndael.BlockSize / 8);
+                rijndael.Key = keyGenerator.GetBytes(rijndael.KeySize / 8);
+
+                byte[] buffer = new byte[length];
+
+                try
+                {
+                    var mscrypto = new MemoryStream(hash);
+                    using (var cryptoStream = new CryptoStream(mscrypto, rijndael.CreateDecryptor(), CryptoStreamMode.Read))
+                    {
+                        cryptoStream.Read(buffer, 0, length);
+                    }
+
+                    isValide = true;
                 }
+                catch
+                {
+                    isValide = false;
+                }
+
+                return buffer;
             }
+
         }
 
         public byte[] EncryptStream(byte[] data)
@@ -213,110 +265,137 @@ namespace AssetsCompile
             }
         }
 
-        public byte[] DecryptStream(byte[] data)
+        public byte[] DecryptStream(byte[] data, out bool isValide)
         {
-            using (AesCryptoServiceProvider Aes1 = new AesCryptoServiceProvider())
+            try
             {
-                Aes1.Key = KeyCrypto;
-                Aes1.IV = IVCrypto;
-
-                ICryptoTransform encryptor = Aes1.CreateDecryptor();
-
-                using (MemoryStream ms = new MemoryStream(data))
+                using (AesCryptoServiceProvider Aes1 = new AesCryptoServiceProvider())
                 {
-                    using (CryptoStream cs = new CryptoStream(ms, encryptor, CryptoStreamMode.Read))
+                    Aes1.Key = KeyCrypto;
+                    Aes1.IV = IVCrypto;
+
+                    ICryptoTransform encryptor = Aes1.CreateDecryptor();
+
+                    using (MemoryStream ms = new MemoryStream(data))
                     {
-                        byte[] buffer = new byte[data.Length];
+                        using (CryptoStream cs = new CryptoStream(ms, encryptor, CryptoStreamMode.Read))
+                        {
+                            byte[] buffer = new byte[data.Length];
 
-                        cs.Read(buffer, 0, data.Length);
+                            cs.Read(buffer, 0, data.Length);
 
-                        return buffer;
+                            isValide = true;
+
+                            return buffer;
+                        }
+
                     }
-                     
-                }
 
+                }
+            }
+            catch
+            {
+                isValide = false;
+                return new byte[0];
             }
         }
 
-        public void Read(byte[] data, string password)
+        public void Read(byte[] data, string password, out bool isValide)
         {
             BinaryReader Crypto_bin = new BinaryReader(new MemoryStream(data));
 
-            int length = Crypto_bin.ReadInt32();
-            byte[] keyIV = Crypto_bin.ReadBytes(length);
-            byte[] datafile = Crypto_bin.ReadBytes(data.Length - length - 4);
-            Crypto_bin.Close();
-
-            //keyIV = DecryptKey(keyIV, password);
+            int length_key_hash = Crypto_bin.ReadInt32();
+            
+            byte[] keyIV = Crypto_bin.ReadBytes(length_key_hash);
 
             for (int i = 0; i < keyIV.Length; i++)
                 Console.Write(keyIV[i].ToString("x2"));
             Console.Write("\n");
 
-            byte[] key = new byte[32];
-            Array.Copy(keyIV, key, 32);
+            byte[] datafile = Crypto_bin.ReadBytes(data.Length - length_key_hash - 4);
+            Crypto_bin.Close();
 
-            byte[] IV = new byte[16];
-            Array.Copy(keyIV, 32, IV, 0, 16);
+            keyIV = DecryptKey(keyIV, password, out isValide);
 
-            KeyCrypto = key;
-            IVCrypto = IV;
-
-            datafile = DecryptStream(datafile);
-            BinaryReader bin = new BinaryReader(new MemoryStream(datafile));
-            int length_header =  bin.ReadInt32();
-            int length_content = datafile.Length - length_header;
-
-            byte[] header = bin.ReadBytes(length_header);
-            byte[] content = bin.ReadBytes(length_content);
-
-            Console.WriteLine("=======");
-            Console.WriteLine(header.Length);
-            Console.WriteLine(content.Length);
-            Console.WriteLine("=======");
-
-            bin.Close();
-            BinaryReader bin_header = new BinaryReader(new MemoryStream(header));
-
-            int Count = bin_header.ReadInt32();
-
-            for (int i = 0; i < Count; i++)
+            if (isValide)
             {
-                sFile _file = new sFile(); ;
 
-                _file.name = bin_header.ReadString();
+                byte[] key = new byte[32];
+                Array.Copy(keyIV, key, 32);
 
-                Console.WriteLine(_file.name);
+                byte[] IV = new byte[16];
+                Array.Copy(keyIV, 32, IV, 0, 16);
 
-                _file.path = bin_header.ReadString();
-                _file.type = bin_header.ReadString();
+                KeyCrypto = key;
+                IVCrypto = IV;
 
-                _file.index = bin_header.ReadInt32();
-                _file.length = bin_header.ReadInt32();
+                datafile = DecryptStream(datafile, out isValide);
+                if (isValide)
+                {
+
+                    BinaryReader bin = new BinaryReader(new MemoryStream(datafile));
+                    int length_header = bin.ReadInt32();
+                    int length_content = datafile.Length - length_header;
+
+                    byte[] header = bin.ReadBytes(length_header);
+                    byte[] content = bin.ReadBytes(length_content);
+
+                    Console.WriteLine("=======");
+                    Console.WriteLine(header.Length);
+                    Console.WriteLine(content.Length);
+                    Console.WriteLine("=======");
+
+                    bin.Close();
+                    BinaryReader bin_header = new BinaryReader(new MemoryStream(header));
+
+                    int Count = bin_header.ReadInt32();
+
+                    for (int i = 0; i < Count; i++)
+                    {
+                        sFile _file = new sFile(); ;
+
+                        _file.name = bin_header.ReadString();
+
+                        Console.WriteLine(_file.name);
+
+                        _file.path = bin_header.ReadString();
+                        _file.type = bin_header.ReadString();
+
+                        _file.index = bin_header.ReadInt32();
+                        _file.length = bin_header.ReadInt32();
 
 
-                _fileheaders.Add(_file);
+                        _fileheaders.Add(_file);
+                    }
+
+                    bin_header.Close();
+
+                    BinaryReader bin_content = new BinaryReader(new MemoryStream(content));
+                    for (int i = 0; i < Count; i++)
+                    {
+                        sFile _fileheader = _fileheaders[i];
+                        _fileheader.content = bin_content.ReadBytes(_fileheader.length);
+
+                        Console.WriteLine(_fileheader.content.Length + " == " + _fileheader.length);
+
+                        byte[] test = new byte[128];
+                        Array.Copy(_fileheader.content, test, 128);
+
+                        Console.WriteLine(Encoding.UTF8.GetString(test));
+                        Console.WriteLine("==");
+
+                        _fileheaders[i] = _fileheader;
+                    }
+                }
+                else
+                {
+                    Console.WriteLine("Not valide !");
+                }
             }
-
-            bin_header.Close();
-
-            BinaryReader bin_content  = new BinaryReader(new MemoryStream(content));
-            for (int i = 0; i < Count; i++)
+            else
             {
-                sFile _fileheader = _fileheaders[i];
-                _fileheader.content = bin_content.ReadBytes(_fileheader.length);
-
-                Console.WriteLine(_fileheader.content.Length + " == " + _fileheader.length);
-
-                byte[] test = new byte[128];
-                Array.Copy(_fileheader.content, test, 128);
-
-                Console.WriteLine(Encoding.UTF8.GetString(test));
-                Console.WriteLine("==");
-
-                _fileheaders[i] = _fileheader;
+                Console.WriteLine("Not valide !");
             }
-
          }
     }
 }
